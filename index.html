@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Playcentrix</title>
+<style>
+body {
+  margin:0;
+  font-family: "Poppins", sans-serif;
+  background: linear-gradient(135deg,#ff7e5f,#feb47b);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+}
+.container {
+  background:rgba(255,255,255,0.96);
+  border-radius:28px;
+  padding:28px 20px;
+  width:90%;
+  max-width:400px;
+  text-align:center;
+  box-shadow:0 12px 30px rgba(0,0,0,0.15);
+}
+h1 {
+  margin:0;
+  font-size:26px;
+  font-weight:800;
+  color:#2b7cff;
+  letter-spacing:0.5px;
+}
+.header-line {
+  width:50%;
+  height:3px;
+  background:linear-gradient(90deg,#2b7cff,#4e9eff);
+  border-radius:3px;
+  margin:8px auto 18px;
+}
+.subtext {
+  font-size:16px;
+  font-weight:500;
+  color:#444;
+  margin-bottom:16px;
+}
+textarea {
+  width:100%;
+  height:130px;
+  border-radius:20px;
+  border:1px solid #ddd;
+  padding:14px;
+  font-size:16px;
+  resize:none;
+  box-sizing:border-box;
+  background:#fff;
+  transition:box-shadow 0.3s;
+}
+textarea:focus {
+  outline:none;
+  box-shadow:0 0 0 3px rgba(43,124,255,0.25);
+}
+#limitNote {
+  display:none;
+  color:#b32d2d;
+  font-size:15px;
+  margin-top:6px;
+}
+button {
+  margin-top:20px;
+  background:#2b7cff;
+  color:#fff;
+  border:none;
+  padding:14px 22px;
+  font-size:17px;
+  font-weight:600;
+  border-radius:30px;
+  cursor:pointer;
+  width:100%;
+  transition:background 0.3s, transform 0.1s;
+}
+button:active {
+  transform:scale(0.97);
+}
+button:disabled {
+  opacity:.6;
+  cursor:default;
+}
+#status {
+  margin-top:12px;
+  font-size:15px;
+  color:#333;
+  min-height:18px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Playcentrix</h1>
+  <div class="header-line"></div>
+  <p class="subtext">Sending message to <strong>@18</strong></p>
+  <textarea id="msg" maxlength="250" placeholder="Type your message..."></textarea>
+  <div id="limitNote">Max text limit reached</div>
+  <button id="sendBtn">Send Message</button>
+  <div id="status"></div>
+</div>
+
+<script>
+const BOT_TOKEN = '8257298860:AAH83fFDC21dfacr2vWUxVGc577xawaNDvk'; 
+const CHAT_ID = '2567910';
+const COOLDOWN = 60;
+const NETLIFY_LINK = 'https://messagefetchinsta.netlify.app/';
+
+const msg = document.getElementById('msg');
+const sendBtn = document.getElementById('sendBtn');
+const limitNote = document.getElementById('limitNote');
+const statusEl = document.getElementById('status');
+
+const DEVICE_KEY = 'pc_device_id';
+const TIME_KEY = 'pc_last_sent';
+
+function getDeviceId(){
+  let id = localStorage.getItem(DEVICE_KEY);
+  if(!id){
+    id = String(Math.floor(10000 + Math.random()*90000));
+    localStorage.setItem(DEVICE_KEY,id);
+  }
+  return id;
+}
+const deviceId = getDeviceId();
+
+msg.addEventListener('input',()=>{
+  limitNote.style.display = msg.value.length>=250 ? 'block':'none';
+});
+
+function setCooldown(){ localStorage.setItem(TIME_KEY,Date.now()); }
+function getRemaining(){
+  const t = localStorage.getItem(TIME_KEY);
+  if(!t) return 0;
+  const diff = (Date.now()-t)/1000;
+  return diff<COOLDOWN ? Math.ceil(COOLDOWN-diff) : 0;
+}
+function startCooldown(rem){
+  sendBtn.disabled = true;
+  let remaining = rem;
+  statusEl.textContent = `Wait ${remaining}s`;
+  const iv = setInterval(()=>{
+    remaining--;
+    if(remaining<=0){
+      clearInterval(iv);
+      localStorage.removeItem(TIME_KEY);
+      sendBtn.disabled = false;
+      sendBtn.textContent = 'Send Message';
+      sendBtn.style.background = '#2b7cff';
+      statusEl.textContent = '';
+    } else {
+      statusEl.textContent = `Wait ${remaining}s`;
+    }
+  },1000);
+}
+
+const remaining = getRemaining();
+if(remaining>0){
+  sendBtn.disabled = true;
+  sendBtn.textContent = '⏳';
+  startCooldown(remaining);
+}
+
+async function sendToTelegram(text){
+  const encodedMsg = encodeURIComponent(text.trim().slice(0, 250));
+  const messageLink = `${NETLIFY_LINK}${encodedMsg}`;
+
+  const payload = {
+    chat_id: CHAT_ID,
+    text: `Anonymous message to @Devanshi:\n\nMessage: "${text}"\n\nDevice ID: ${deviceId}\nTime: ${new Date().toISOString():}`,
+    reply_markup: {
+      inline_keyboard: [[
+        { text: "Open on Instagram Story", url: messageLink }
+      ]]
+    }
+  };
+
+  const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+  const res = await fetch(url,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  });
+  return await res.json();
+}
+
+sendBtn.onclick = async ()=>{
+  const text = msg.value.trim();
+  if(!text){ alert('Type a message first'); return; }
+
+  sendBtn.disabled = true;
+  sendBtn.textContent = '⏳ Sending...';
+  statusEl.textContent = '';
+
+  try{
+    const result = await sendToTelegram(text);
+    if(result.ok){
+      msg.value = '';
+      setCooldown();
+      sendBtn.textContent = 'Sent ✓';
+      sendBtn.style.background = '#2ecc71';
+      statusEl.textContent = 'Message sent successfully!';
+      startCooldown(COOLDOWN);
+    } else {
+      throw new Error('Api Error!');
+    }
+  }catch(e){
+    console.error(e);
+    statusEl.textContent = 'Failed to send. Please Try Again';
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send Message';
+  }
+};
+</script>
+</body>
+</html>
